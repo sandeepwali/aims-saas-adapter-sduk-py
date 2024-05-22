@@ -1,0 +1,23 @@
+stages:
+  - docker-build
+
+variables:
+  DOCKER_HOST: tcp://docker-dind:2375
+
+docker-build:
+  stage: docker-build
+  image: harbor.solumesl.com/docker/docker:20.10.17-git-r0
+  script:
+    - DOCKER_IMAGE_NAME=${CI_REGISTRY}/aims-saas/${CI_PROJECT_NAME}:${CI_COMMIT_TAG}
+    - buildah build --network host --no-cache --pull -t "${DOCKER_IMAGE_NAME}" Dockerfile
+    - echo "${CI_REGISTRY_PASSWORD}" | buildah login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+    - buildah push "${DOCKER_IMAGE_NAME}"
+    - |
+      curl --header 'Content-Type: multipart/form-data' \
+           --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+           --form "tag_name=$CI_COMMIT_TAG" \
+           --form "name=Release $CI_COMMIT_TAG" \
+           --form "description=Auto-generated release for docker image [$DOCKER_IMAGE_NAME](https://harbor.solumesl.com/harbor/projects/3394/repositories/aims-saas-adapter-sduk-py)." \
+           "https://gitlab.solumesl.com//api/v4/projects/$CI_PROJECT_ID/releases"
+  only:
+    - tags
